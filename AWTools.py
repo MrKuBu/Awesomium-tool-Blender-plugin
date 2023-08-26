@@ -166,7 +166,7 @@ class AWTools_CleanDrivers(bpy.types.Operator):
         assert bpy.context.mode == 'OBJECT', "Must be in object mode!"
 
         for ob in bpy.context.selected_objects:
-            if not ob.data.shape_keys: continue
+            #if not ob.data.shape_keys: continue
 
             for b in C.active_object.data.shape_keys.key_blocks:
                 b.driver_remove('value')
