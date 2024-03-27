@@ -1,5 +1,8 @@
 # Awesomium tool for blender
 
+This plugin provides a lot of useful functions for working with 3D.
+Here we work with blendshapes, bones, animation and more.
+You can see the functionality below (See Interface).
 
 ## INSTALL
 
@@ -7,8 +10,8 @@
 
 ## Interface
 
-<img src="https://i.imgur.com/7BY8T3d.png" />
-
+<img src="https://i.imgur.com/9wHLuuw.png" />
+<img src="https://i.imgur.com/mZxWPrq.png" />
 
 ## USE
 
