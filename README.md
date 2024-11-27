@@ -9,9 +9,8 @@ You can see the functionality below (See Interface).
 <img src="https://i.imgur.com/o5X3z54.png" />
 
 ## Interface
-
-<img src="https://i.imgur.com/9wHLuuw.png" />
-<img src="https://i.imgur.com/mZxWPrq.png" />
+<img src="https://i.imgur.com/YnD53q8.png" />
+<img src="https://i.imgur.com/DXeLtiE.png" />
 
 ## USE
 
