@@ -9,6 +9,9 @@ You can see the functionality below (See Interface).
 <img src="https://i.imgur.com/o5X3z54.png" />
 
 ## Interface
+
+<img src="https://i.imgur.com/qUCGACB.png" />
+All tabs opened.
 <img src="https://i.imgur.com/YnD53q8.png" />
 <img src="https://i.imgur.com/DXeLtiE.png" />
 
