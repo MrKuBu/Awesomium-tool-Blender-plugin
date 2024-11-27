@@ -11,10 +11,9 @@ bl_info = {
     "name": "Awesomium Tools",
     "author": "MrKuBu",
     "location": "3D View > Properties > AWTool",
-    "description": "Easy working for blendshapes and other.",
+    "description": "Easy working for blendshapes and other. ",
     "tracker_url": "https://mrkubu.github.io/",  
-    "category": "Utility",
-    "version": (2, 0, 0),
+    "category": "Animation",
     "blender": (2, 80, 0),
 }
 
@@ -113,7 +112,7 @@ bpy.types.Scene.MaximumFrames= IntProperty (
     max=100000
 )
 
-def copy_all_shape_keys():
+def copy_all_shape_keys(self):
     if len(bpy.context.selected_objects) == 2:
         source = bpy.context.selected_objects[1]
         dest = bpy.context.active_object
@@ -127,12 +126,13 @@ def copy_all_shape_keys():
         #print("Model to transfer: ", dest.name)
         
         if source.data.shape_keys is None:
-            print("Source object has no shape keys!") 
+            self.report({'WARNING'}, "Source object has no shape keys!")
         else:
             for idx in range(1, len(source.data.shape_keys.key_blocks)):
                 source.active_shape_key_index = idx
                 print("Copying Shape Key - ", source.active_shape_key.name)
                 bpy.ops.object.shape_key_transfer()
+            self.report({'INFO'}, "Sucess transfered shape keys!")
 
 def LashesGen(context):
     obj = bpy.context.selected_objects[0]
@@ -360,6 +360,28 @@ def dp_clear(obj, pbone):
         if const.name.startswith("DP_"):
             obj.constraints.remove(const)
 
+import bpy
+
+def set_custom_shape_to_bones(custom_object_name):
+    # Ensure the custom object exists
+    custom_object = bpy.data.objects.get(custom_object_name)
+    if not custom_object:
+        print(f"Object '{custom_object_name}' does not exist.")
+        return {'CANCELLED'}
+
+    # Ensure we are dealing with an armature and are in Pose Mode
+    if bpy.context.active_object.type != 'ARMATURE' or bpy.context.mode != 'POSE':
+        print("Must be in Pose Mode with an armature selected.")
+        return {'CANCELLED'}
+    
+    armature = bpy.context.active_object
+    selected_bones = bpy.context.selected_pose_bones
+    
+    # Set shape
+    for bone in selected_bones:
+        bone.custom_shape = custom_object
+        print(f"Set custom shape for bone '{bone.name}'")
+    return {'FINISHED'}
 
 class AWTools_LowercaseShapeKeys(bpy.types.Operator):
     """Change shape key names to lowercase"""
@@ -373,7 +395,26 @@ class AWTools_LowercaseShapeKeys(bpy.types.Operator):
                 for b in ob.data.shape_keys.key_blocks:
                     if b.name != "Base":
                         b.name = b.name[0].lower() + b.name[1:]
+
+            self.report({'INFO'}, "Sucess renamed shapekeys to lowercase name.")
         return {'FINISHED'}
+
+class AWTools_SetAllShapeKeysValuesToZero(bpy.types.Operator):
+    """Sets all shapekey values to 0"""
+    bl_idname = "awt.setallshapekeyvaluestozero"
+    bl_label = "Set all shape keys values to 0"
+    bl_description = "Sets all shapekey values to 0 WITHOUT inserting a keyframe."
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        for obj in bpy.context.selected_objects:
+
+            if obj and obj.type == 'MESH' and obj.data.shape_keys:
+                for key in obj.data.shape_keys.key_blocks:
+                    key.value = 0
+        bpy.context.view_layer.update()
+        self.report({'INFO'}, "Sucess setted all shapekeys to 0.")
+        return {"FINISHED"}
 
 class AWTools_CleanDrivers(bpy.types.Operator):
     """Clear driver from shapekeys"""
@@ -382,12 +423,16 @@ class AWTools_CleanDrivers(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        assert context.mode == 'OBJECT', "Must be in object mode!"
+        if bpy.context.mode != 'OBJECT':
+            self.report({'WARNING'}, "Must be in object mode!")
+            return {'CANCELLED'}
         
         for ob in context.selected_objects:
             if ob.data.shape_keys:
                 for b in ob.data.shape_keys.key_blocks:
                     b.driver_remove('value')
+
+                self.report({'INFO'}, "Sucess cleared all drivers!")
         return {'FINISHED'}
 
 class AWTools_CleanEmptyBlendshapes(bpy.types.Operator):
@@ -399,7 +444,9 @@ class AWTools_CleanEmptyBlendshapes(bpy.types.Operator):
     def execute(self, context):
         tolerance = 0.001
 
-        assert bpy.context.mode == 'OBJECT', "Must be in object mode!"
+        if bpy.context.mode != 'OBJECT':
+            self.report({'WARNING'}, "Must be in object mode!")
+            return {'CANCELLED'}
 
         for ob in bpy.context.selected_objects:
             if ob.type != 'MESH': continue
@@ -431,6 +478,8 @@ class AWTools_CleanEmptyBlendshapes(bpy.types.Operator):
 
             for kb_name in to_delete:
                 ob.shape_key_remove(ob.data.shape_keys.key_blocks[kb_name])
+
+            self.report({'INFO'}, "Sucess cleared empty shapes!")
                 
         return {'FINISHED'}
 
@@ -444,7 +493,9 @@ class AWTools_CleanMaterials(bpy.types.Operator):
         for material in bpy.data.materials:
             if not material.users:
                 bpy.data.materials.remove(material)
-                
+                print(material)
+        
+        self.report({'INFO'}, "Try delete unused materials.")
         return {'FINISHED'}
 
 class AWTools_CleanTextures(bpy.types.Operator):
@@ -457,7 +508,9 @@ class AWTools_CleanTextures(bpy.types.Operator):
         for texture in bpy.data.textures:
             if not texture.users:
                 bpy.data.textures.remove(texture)
-                
+                print(texture)
+
+        self.report({'INFO'}, "Try delete unused images.")
         return {'FINISHED'}
 
 class AWTools_TransferBlendshapes(bpy.types.Operator):
@@ -467,7 +520,7 @@ class AWTools_TransferBlendshapes(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        copy_all_shape_keys()
+        copy_all_shape_keys(self)
 
         return {'FINISHED'}
 
@@ -495,6 +548,7 @@ class AWTools_RenameBlendshapes(bpy.types.Operator):
         for key in shape_keys:
             key.name = key.name.replace(key_value, replace_name_value)
 
+        self.report({'INFO'}, "Shapes renamed.")
         return {'FINISHED'}
 
 
@@ -518,6 +572,7 @@ class AWTools_RenameBones(bpy.types.Operator):
         for bone in bones:
             bone.name = bone.name.replace(key_value, replace_name_value)
 
+        self.report({'INFO'}, "Bones renamed.")
         return {'FINISHED'}
 
 
@@ -534,12 +589,12 @@ class AWTools_TransferLimitIK(bpy.types.Operator):
             limit_rot = next((con for con in pose_bone.constraints if con.type == 'LIMIT_ROTATION'), None)
 
             if limit_rot:
-                # Get all data limit for IK
+                # Copy data IK
                 pose_bone.use_ik_limit_x = limit_rot.use_limit_x
                 pose_bone.use_ik_limit_y = limit_rot.use_limit_y
                 pose_bone.use_ik_limit_z = limit_rot.use_limit_z
 
-                # Set limit IK in Limit Rotation
+                # Set limit IK from Limit Rotation
                 pose_bone.ik_min_x = limit_rot.min_x if limit_rot.use_limit_x else 0.0
                 pose_bone.ik_max_x = limit_rot.max_x if limit_rot.use_limit_x else 0.0
                 pose_bone.ik_min_y = limit_rot.min_y if limit_rot.use_limit_y else 0.0
@@ -547,11 +602,11 @@ class AWTools_TransferLimitIK(bpy.types.Operator):
                 pose_bone.ik_min_z = limit_rot.min_z if limit_rot.use_limit_z else 0.0
                 pose_bone.ik_max_z = limit_rot.max_z if limit_rot.use_limit_z else 0.0
                 
-                print("Limit Rotation data has been copied to IK settings for the bone.")
+                self.report({'INFO'}, "Limit Rotation data has been copied to IK settings for the bone.")
             else:
-                print("The Limit Rotation constraint was not found on the selected bone.")
+                self.report({'WARNING'}, "The Limit Rotation constraint was not found on the selected bone.")
         else:
-            print("Please select an armature and a pose bone.")
+            self.report({'ERROR'}, "Please select an armature and a pose bone.")
         return {'FINISHED'}
 
 
@@ -567,11 +622,6 @@ class AWTools_EyelashesGenerator(bpy.types.Operator):
     def execute(self, context):
         LashesGen(context)
         return {'FINISHED'}
-
-
-
-
-
 
 class AWTools_DYNAMIC_PARENT_create(bpy.types.Operator):
     """Create a new animated Child Of constraint"""
@@ -626,7 +676,6 @@ class AWTools_DYNAMIC_PARENT_disable(bpy.types.Operator):
                 continue
             disable_constraint(obj, const, frame)
             counter += 1
-
         self.report({'INFO'}, f'{counter} constraints were disabled.')
         return {'FINISHED'}
 
@@ -708,14 +757,15 @@ class AWTools_TransferWeightbonestobone(bpy.types.Operator):
         weightAdd = context.scene.Transferweightname.AddActiveBoneWeight
         Dellold = context.scene.Transferweightname.DellOldWeight
 
-        assert obj.type == 'MESH', "Must be in object mode!"
+        if obj.type != 'MESH':
+            self.report({'WARNING'}, "Must be in object mode!")
+            return {'CANCELLED'}
 
         for obj in bpy.context.selected_objects:
             if obj.type != 'MESH': continue
 
-            # Проверяем, существуют ли группы вершин
             if getOldWeight in obj.vertex_groups and weightAdd in obj.vertex_groups:
-                # Получаем индекс новой группы вершин
+                # Get index
                 new_bone_vgroup_index = obj.vertex_groups[weightAdd].index
 
                 # loop vertex and get weight
@@ -740,138 +790,710 @@ class AWTools_TransferWeightbonestobone(bpy.types.Operator):
                 if Dellold:
                     obj.vertex_groups.remove(obj.vertex_groups[getOldWeight])
 
-            # Update view layer
             bpy.context.view_layer.update()
         
         return {'FINISHED'}
 
+class AWTools_TransferWeightbonestobonemass(bpy.types.Operator):
+    """Transfer weight bones (2) to bone (1) for all objects"""
+    bl_idname = "awt.transferweightbonestobonemass"
+    bl_label = "Transfer weight bones to bone for all objects"
+    bl_options = {'REGISTER', 'UNDO'}
 
+    def execute(self, context):
+        obj = bpy.context.active_object
+
+        getOldWeight = context.scene.Transferweightname.KeyOldWeight
+        weightAdd = context.scene.Transferweightname.AddActiveBoneWeight
+        Dellold = context.scene.Transferweightname.DellOldWeight
+
+        if bpy.context.active_object.type != 'MESH':
+            self.report({'WARNING'}, "Must be in object mode!")
+            return {'CANCELLED'}
+
+        for obj in bpy.context.scene.objects:
+            if obj.type != 'MESH': continue
+
+            if getOldWeight in obj.vertex_groups and weightAdd in obj.vertex_groups:
+                new_bone_vgroup_index = obj.vertex_groups[weightAdd].index
+
+                for vertex in obj.data.vertices:
+                    old_weight = 0
+                    for group in vertex.groups:
+                        if group.group == obj.vertex_groups[getOldWeight].index:
+                            old_weight = group.weight
+                            break
+                    
+                    for group in vertex.groups:
+                        if group.group == new_bone_vgroup_index:
+                            obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'ADD')
+                            break
+                    else:
+                        obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'REPLACE')
+
+                if Dellold:
+                    obj.vertex_groups.remove(obj.vertex_groups[getOldWeight])
+
+                bpy.context.view_layer.update()
+        
+        return {'FINISHED'}
+
+class AWTools_TransferWeightbonestobonemassrig(bpy.types.Operator):
+    """Transfer weight bones (2) to bone (1) for all objects rig"""
+    bl_idname = "awt.transferweightbonestobonemassrig"
+    bl_label = "Transfer weight bones to bone for all objects rig"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        selected_object = bpy.context.active_object
+
+        getOldWeight = context.scene.Transferweightname.KeyOldWeight
+        weightAdd = context.scene.Transferweightname.AddActiveBoneWeight
+        Dellold = context.scene.Transferweightname.DellOldWeight
+
+        if selected_object.type == 'ARMATURE':
+            linked_rig = selected_object
+        elif selected_object.type == 'MESH':
+            linked_rig = None
+            for modifier in selected_object.modifiers:
+                if modifier.type == 'ARMATURE':
+                    linked_rig = modifier.object
+                    break
+        else:
+            bpy.context.window_manager.popup_menu(lambda self, context: self.layout.operator("wm.popup_operator"), title="Select a mesh or armature object!")
+            return {'CANCELLED'}
+
+        if linked_rig is None:
+            bpy.context.window_manager.popup_menu(lambda self, context: self.layout.operator("wm.popup_operator"), title="No armature linked to the selected mesh!")
+            return {'CANCELLED'}
+
+        for obj in bpy.context.scene.objects:
+            if obj.type == 'MESH':
+                for modifier in obj.modifiers:
+                    if modifier.type == 'ARMATURE' and modifier.object == linked_rig:
+                        if getOldWeight in obj.vertex_groups and weightAdd in obj.vertex_groups:
+                            new_bone_vgroup_index = obj.vertex_groups[weightAdd].index
+
+                            for vertex in obj.data.vertices:
+                                old_weight = 0
+                                for group in vertex.groups:
+                                    if group.group == obj.vertex_groups[getOldWeight].index:
+                                        old_weight = group.weight
+                                        break
+                                
+                                for group in vertex.groups:
+                                    if group.group == new_bone_vgroup_index:
+                                        obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'ADD')
+                                        break
+                                else:
+                                    obj.vertex_groups[new_bone_vgroup_index].add([vertex.index], old_weight, 'REPLACE')
+
+                            if Dellold:
+                                obj.vertex_groups.remove(obj.vertex_groups[getOldWeight])
+
+        bpy.context.view_layer.update()
+
+        return {'FINISHED'}
+
+class AWTools_SetCustomShape(bpy.types.Operator):
+    """Set Custom Shape to Selected Bones"""
+    bl_idname = "awt.set_custom_shape"
+    bl_label = "Set Custom Shape to Selected Bones"
+    bl_options = {'REGISTER', 'UNDO'}
+        
+    def execute(self, context):
+        custom_object_name = context.scene.custom_object_to_bones.name
+        return set_custom_shape_to_bones(custom_object_name)
+
+
+class AWTools_CopyLocationHanddef(bpy.types.Operator):
+    """Transfer 1 rig to 2 rig"""
+    bl_idname = "awt.copylocationhand"
+    bl_label = "ransfer 1 rig to 2 rig"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        target_rig = None
+        selected_rig = bpy.context.selected_objects[0]
+        target_rig = bpy.context.selected_objects[1]
+
+        bone_mapping = {
+            "hand_l": "hand_l",
+            "pinky_01_l": "pinky_01_l",
+            "pinky_02_l": "pinky_02_l",
+            "pinky_03_l": "pinky_03_l",
+            "ring_01_l": "ring_01_l",
+            "ring_02_l": "ring_02_l",
+            "ring_03_l": "ring_03_l",
+            "middle_01_l": "middle_01_l",
+            "middle_02_l": "middle_02_l",
+            "middle_03_l": "middle_03_l",
+            "index_01_l": "index_01_l",
+            "index_02_l": "index_02_l",
+            "index_03_l": "index_03_l",
+            "thumb_01_l": "thumb_01_l",
+            "thumb_02_l": "thumb_02_l",
+            "thumb_03_l": "thumb_03_l",
+            "hand_r": "hand_r",
+            "pinky_01_r": "pinky_01_r",
+            "pinky_02_r": "pinky_02_r",
+            "pinky_03_r": "pinky_03_r",
+            "ring_01_r": "ring_01_r",
+            "ring_02_r": "ring_02_r",
+            "ring_03_r": "ring_03_r",
+            "middle_01_r": "middle_01_r",
+            "middle_02_r": "middle_02_r",
+            "middle_03_r": "middle_03_r",
+            "index_01_r": "index_01_r",
+            "index_02_r": "index_02_r",
+            "index_03_r": "index_03_r",
+            "thumb_01_r": "thumb_01_r",
+            "thumb_02_r": "thumb_02_r",
+            "thumb_03_r": "thumb_03_r",
+        }
+
+
+        selected_objects = bpy.context.selected_objects
+
+        if len(selected_objects) == 2:
+            for source_bone, target_bone in bone_mapping.items():
+                constraint = selected_rig.pose.bones.get(source_bone).constraints.new('COPY_LOCATION')
+                constraint.target = target_rig
+                constraint.subtarget = target_bone
+        else:
+            self.report({'WARNING'}, "Select two rigs!")
+        
+        return {'FINISHED'}
+
+class AWTools_CopyLocationHandarp(bpy.types.Operator):
+    """Transfer 1 rig to 2 rig ARP"""
+    bl_idname = "awt.copylocationhandarp"
+    bl_label = "ransfer 1 rig to 2 rig (ARP)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        target_rig = None
+
+        selected_rig = bpy.context.selected_objects[0]
+        target_rig = bpy.context.selected_objects[1]
+
+        bone_mapping = {
+            "c_hand_fk.l": "hand_l",
+            "c_hand_ik.l": "hand_l",
+            "c_pinky1.l": "pinky_01_l",
+            "c_pinky2.l": "pinky_02_l",
+            "c_pinky3.l": "pinky_03_l",
+            "c_ring1.l": "ring_01_l",
+            "c_ring2.l": "ring_02_l",
+            "c_ring3.l": "ring_03_l",
+            "c_middle1.l": "middle_01_l",
+            "c_middle2.l": "middle_02_l",
+            "c_middle3.l": "middle_03_l",
+            "c_index1.l": "index_01_l",
+            "c_index2.l": "index_02_l",
+            "c_index3.l": "index_03_l",
+            "c_thumb1_base.l": "thumb_01_l",
+            "c_thumb2.l": "thumb_02_l",
+            "c_thumb3.l": "thumb_03_l",
+            "c_hand_fk.r": "hand_r",
+            "c_hand_ik.r": "hand_r",
+            "c_pinky1.r": "pinky_01_r",
+            "c_pinky2.r": "pinky_02_r",
+            "c_pinky3.r": "pinky_03_r",
+            "c_ring1.r": "ring_01_r",
+            "c_ring2.r": "ring_02_r",
+            "c_ring3.r": "ring_03_r",
+            "c_middle1.r": "middle_01_r",
+            "c_middle2.r": "middle_02_r",
+            "c_middle3.r": "middle_03_r",
+            "c_index1.r": "index_01_r",
+            "c_index2.r": "index_02_r",
+            "c_index3.r": "index_03_r",
+            "c_thumb1_base.r": "thumb_01_r",
+            "c_thumb2.r": "thumb_02_r",
+            "c_thumb3.r": "thumb_03_r",
+        }
+
+        selected_objects = bpy.context.selected_objects
+
+        if len(selected_objects) == 2:
+            for source_bone, target_bone in bone_mapping.items():
+                constraint = selected_rig.pose.bones.get(source_bone).constraints.new('COPY_LOCATION')
+                constraint.target = target_rig
+                constraint.subtarget = target_bone
+        else:
+            self.report({'WARNING'}, "Select two rigs!")
+        
+        return {'FINISHED'}
+
+class AWTools_SelectRingAndMerge(bpy.types.Operator):
+    """Select ring loops and merge"""
+    bl_idname = "awt.selectring_merge"
+    bl_label = "Select ring and merge"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        edit_object = bpy.context.edit_object
+        if edit_object:
+            mesh = edit_object.data
+            if mesh.total_edge_sel > 0:
+                bpy.ops.mesh.loop_multi_select(ring=True)
+                bpy.ops.mesh.merge(type='COLLAPSE')
+
+                # Merge UVs on collapsed edges (WIP)
+                #bpy.ops.uv.select_all(action='SELECT')
+                #bpy.ops.uv.weld()
+                #bpy.ops.mesh.remove_doubles(threshold=0.0001, use_unselected=False)
+                self.report({'INFO'}, "Sucess merged ring loops!")
+            else:
+                self.report({'WARNING'}, "Select one or more edges!")
+        else:
+            self.report({'ERROR'}, "Enter to edit mode!")
+
+        return {'FINISHED'}
+
+class AWTools_SelectRingAndDissolve(bpy.types.Operator):
+    """Select ring loops and dissolve"""
+    bl_idname = "awt.selectring_dissolve"
+    bl_label = "Select ring and dissolve"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        edit_object = bpy.context.edit_object
+        if edit_object:
+            mesh = edit_object.data
+            if mesh.total_edge_sel > 0:
+                bpy.ops.mesh.loop_multi_select(ring=True)
+                bpy.ops.mesh.dissolve_edges()
+                self.report({'INFO'}, "Sucess dissolve ring loops!")
+            else:
+                self.report({'WARNING'}, "Select one or more edges!")
+        else:
+            self.report({'ERROR'}, "Enter to edit mode!")
+
+        return {'FINISHED'}
+
+class AWTools_RenameEngMMD(bpy.types.Operator):
+    """Select bones and auto rename to englis bones"""
+    bl_idname = "awt.renamemmdtoeng"
+    bl_label = "Select bone and auto rename to english"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        for item in bpy.data.objects:
+            if item.type == "MESH":
+                for slot in item.material_slots:
+                    if hasattr(slot.material, "mmd_material") and slot.material.mmd_material.name_e != "":
+                        print("[AWTool] Rename material " + slot.material.name + " to " + slot.material.mmd_material.name_e)
+                        slot.material.name = slot.material.mmd_material.name_e
+            if item.type == "ARMATURE":
+                for bone in item.pose.bones:
+                    if hasattr(bone, "mmd_bone") and bone.mmd_bone.name_e != "":
+                        print("[AWTool] Rename bone " + bone.name + " to " + bone.mmd_bone.name_e)
+                        bone.name = bone.mmd_bone.name_e
+        return {'FINISHED'}
+
+class AWTools_OptimizDisablesubdivandmultires(bpy.types.Operator):
+    """Disables all subdivision and multires modifiers for viewport and render"""
+    bl_idname = "awt.disable_subdiv_and_multires_on_selected"
+    bl_label = "Disable Subdiv and multires on selected"
+    bl_description = "Disables all subdivision and multires modifiers for viewport and render. Applies to active and selected"
+    bl_options = {"REGISTER", "UNDO"}
+    
+    def execute(self, context):
+        for obj in bpy.context.selected_objects:
+            for mod in obj.modifiers:
+                if mod.type in {'SUBSURF', 'MULTIRES'}:
+                    mod.show_viewport = False
+                    mod.show_render = False
+        self.report({'INFO'}, "All Subdivision Surface and Multiresolution modifiers disabled in viewport and render for selected objects.")
+        return {"FINISHED"}
+
+class AWTools_TriangulateNgonsOnActive(bpy.types.Operator):
+    """Adds a triangulate modifier that targets N-Gons"""
+    bl_idname = "awt.triangulate_ngons_on_active"
+    bl_label = "Triangulate N-Gons on active"
+    bl_description = "Adds a triangulate modifier that targets N-Gons. Applies to active"
+    bl_options = {"REGISTER", "UNDO"}
+    
+    def execute(self, context):
+        triangulate_min = 5
+        triangulate_min
+
+        if bpy.context.active_object and bpy.context.active_object.type == 'MESH':
+            obj = bpy.context.active_object
+            triangulate_mod = obj.modifiers.new(name="Triangulate", type='TRIANGULATE')
+            triangulate_mod.quad_method = 'FIXED'
+            triangulate_mod.ngon_method = 'BEAUTY'
+            triangulate_mod.min_vertices = triangulate_min
+            self.report({'INFO'}, "Triangulate modifier added with specified settings.")
+        else:
+            self.report({'INFO'}, "No suitable active object found or the active object cannot have modifiers.")
+        return {"FINISHED"}
+
+class AWTools_TriangulateActiveMesh(bpy.types.Operator):
+    """Adds a triangulate modifier that targets 4-Gons"""
+    bl_idname = "awt.triangulate_active_mesh"
+    bl_label = "Triangulate active mesh"
+    bl_description = "Adds a triangulate modifier to entire mesh. Applies to active"
+    bl_options = {"REGISTER", "UNDO"}
+    
+    def execute(self, context):
+        triangulate_min = 4
+        triangulate_min
+        if bpy.context.active_object and bpy.context.active_object.type == 'MESH':
+            obj = bpy.context.active_object
+            triangulate_mod = obj.modifiers.new(name="Triangulate", type='TRIANGULATE')
+            triangulate_mod.quad_method = 'FIXED'
+            triangulate_mod.ngon_method = 'BEAUTY'
+            triangulate_mod.min_vertices = triangulate_min
+            self.report({'INFO'}, "Triangulate modifier added with specified settings.")
+        else:
+            self.report({'INFO'}, "No suitable active object found or the active object cannot have modifiers.")
+        return {"FINISHED"}
 
 class AWTools_ui(bpy.types.Panel):
     bl_label = "Awesomium tools"
-    bl_idname = "OBJECT_PT_panel"
+    bl_idname = "OBJECT_AWT_panel"
     bl_category = "AWTool"
-    bl_space_type = "VIEW_3D"
-    bl_region_type = "UI"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_order = 0
+    
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row()
+        try: 
+            row.label(text= "Active Mode: " + context.active_object.mode)
+        except:
+            row.label(text= "Active Mode: N/A")
+
+class AWUI_Statistics_panel(bpy.types.Panel):
+    bl_label = "Statistic mesh"
+    bl_idname = "StatisticMesh"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
 
     def draw(self, context):
         layout = self.layout
+        scene = context.scene
 
-        layout.label(text="Cleaner (Select mesh)")
-        
-        row = layout.row()
-        row.operator("awt.cleandrivers", text="Clear all driver shape keys", icon="PANEL_CLOSE")
-        row = layout.row()
-        row.operator("awt.cleanlessblends", text="Clear empty shape keys", icon="FULLSCREEN_EXIT")
-        row = layout.row()
-        row.operator("awt.clearmaterials", text="Clear unused materials", icon="NODE_MATERIAL")
-        row.operator("awt.cleartextures", text="Clear unused textures", icon="NODE_TEXTURE")
+        try:
+            materialCount = len(context.active_object.material_slots) \
+            if context.active_object.material_slots is not None else 0
+            
+            try:
+                nlaCount = len(context.active_object.animation_data.nla_tracks) \
+                if context.active_object.animation_data.nla_tracks is not None else 0
+            except:
+                nlaCount = 0
+
+            try: shapeKeyCount = len(bpy.context.active_object.data.shape_keys.key_blocks) \
+                if bpy.context.active_object.data.shape_keys.key_blocks is not None else 0            
+            except: shapeKeyCount =0
+                
+            
+            if context.active_object.type == 'MESH':
+                row = layout.row()
+
+                if len(context.selected_objects) ==1:
+                    row.label(text=context.active_object.name + " details.", icon='INFO')
+                    row = layout.row()
+
+                    row.label(text="Vert's: " + str(len(context.active_object.data.vertices)), icon='NORMALS_VERTEX_FACE')
+                    row.label(text="Mat's: " + str(materialCount), icon='MATERIAL')
+                    row = layout.row()
+                    row.label(text="Key's: " + str(shapeKeyCount), icon='SHAPEKEY_DATA')
+                    row.label(text="NLA's: " + str(nlaCount), icon='NLA')
+                    #row = layout.row()
+                    #row.label(text="Edges: " + str(len(context.active_object.data.edges)), icon='MESH_EDGE')
+                    #row.label(text="Faces: " + str(len(context.active_object.data.polygons)), icon='MESH_POLY')
+                    #row.label(text="Triangles: " + str(sum(len(p.vertices) == 3 for p in context.active_object.data.polygons)), icon='MESH_GRID')
+
+                if len(context.selected_objects) >1:
+                    row.label(text="Multiple Objects", icon='INFO')
+                    row = layout.row()
+                    total_verts = sum(len(obj.data.vertices) for obj in context.selected_objects)
+                    #total_edges = sum(len(obj.data.edges) for obj in context.selected_objects)
+                    #total_faces = sum(len(obj.data.polygons) for obj in context.selected_objects)
+                    #total_triangles = sum(len(p.vertices) == 3 for obj in context.selected_objects for p in obj.data.polygons)
+
+                    row.label(text="Vert's: " + str(total_verts), icon='NORMALS_VERTEX_FACE')
+                    ##row.label(text="Edges: " + str(total_edges), icon='MESH_EDGE')
+                    #row.label(text="Mat's: " + str(len(bpy.data.materials) if bpy.data.materials is not None else 0), icon='MATERIAL')
+                    #row.label(text="Key's: " + str(len(bpy.data.shape_keys.key_blocks) if bpy.data.shape_keys.key_blocks is not None else 0), icon='SHAPEKEY_DATA')
+                    #row.label(text="NLA's: " + str(len(bpy.data.animation_data) if bpy.data.animation_data is not None else 0), icon='NLA')
 
 
+        except:
+            print('AWTool Error panel!') 
 
-        row = layout.row()
-        row.operator("awt.lowercaseshapekeys", text="Lowercase shape keys", icon="SMALL_CAPS")
+class AWUI_Cleaner_panel(bpy.types.Panel):
+    bl_label = "Cleaner"
+    bl_idname = "CleanerPanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
+    bl_options = {'DEFAULT_CLOSED'}
 
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
 
+        try:
+            layout.label(text="Cleaner (Select mesh)",icon='BRUSH_DATA')
 
-        layout.separator()
-        layout.label(text="Transfer shapekey (Select [1]parent and [2]child )")
-        row = layout.row()
-        row.operator("awt.transferblend", text="Transfer", icon="TRACKING_FORWARDS_SINGLE")
-        
-        layout.separator()
-        layout.label(text="Renamer shapekeys")
+            #if context.mode == 'OBJECT':
+            row = layout.row()
+            row.operator("awt.cleandrivers", text="Clear all driver shape keys", icon="PANEL_CLOSE")
+            row = layout.row()
+            row.operator("awt.cleanlessblends", text="Clear empty shape keys", icon="FULLSCREEN_EXIT")
+            row = layout.row()
 
+            row.operator("awt.clearmaterials", text="Clear unused materials", icon="NODE_MATERIAL")
+            row.operator("awt.cleartextures", text="Clear unused textures", icon="NODE_TEXTURE")
+            
+        except:
+            print('AWTool Error panel!') 
+
+class AWUI_Shapekeys_panel(bpy.types.Panel):
+    bl_label = "Shapekeys"
+    bl_idname = "ShapekeysPanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
         scene = context.scene
         renamescene = scene.Renamer
-        
-        row = layout.row()
-        row.prop(renamescene, "Key")
-        
-        row = layout.row()
-        row.prop(renamescene, "ReplaceName")
 
-        row = layout.row()
-        row.operator("awt.renameshapes", text="Rename blendshapes", icon="OUTLINER_DATA_GP_LAYER")
+        try:
+            #if context.mode == 'OBJECT':
+            row = layout.row()
+            row.operator("awt.lowercaseshapekeys", text="Lowercase shape keys", icon="SMALL_CAPS")
 
+            row = layout.row()
+            row.operator("awt.setallshapekeyvaluestozero", text="All shapekeys to 0", icon="RADIOBUT_OFF")
+
+            layout.separator()
+            layout.label(text="Transfer shapekey (Select [1]-Parent and [2]-Child )", icon='RESTRICT_SELECT_OFF')
+            row = layout.row()
+            row.operator("awt.transferblend", text="Transfer", icon="TRACKING_FORWARDS_SINGLE")
+                
+            layout.separator()
+            layout.label(text="Renamer shapekeys", icon='SYNTAX_OFF')
+
+            row = layout.row()
+            row.prop(renamescene, "Key", icon='OUTLINER_OB_FONT')
+                
+            row = layout.row()
+            row.prop(renamescene, "ReplaceName", icon='BOLD')
+
+            row = layout.row()
+            row.operator("awt.renameshapes", text="Rename blendshapes", icon="OUTLINER_DATA_GP_LAYER")
+            
+        except:
+            print('AWTool Error panel!') 
+
+class AWUI_Bones_panel(bpy.types.Panel):
+    bl_label = "Bones tools"
+    bl_idname = "BonestoolsPanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
         renamebone = scene.Renamerbone
-        layout.separator()
-        layout.label(text="Renamer bones")
-
-        row = layout.row()
-        row.prop(renamebone, "KeyBone")
-        
-        row = layout.row()
-        row.prop(renamebone, "ReplaceNameBone")
-
-        row = layout.row()
-        row.operator("awt.renamebones", text="Rename bones", icon="OUTLINER_DATA_GP_LAYER")
-
-        row = layout.row()
-        row.operator("awt.transferlimittoik", text="Transfer limit to IK", icon="POSE_HLT")
-
-        # DEBUG
-        #key_value = renamescene.Key
-        #replace_name_value = renamescene.ReplaceName
-        #print("Key:", key_value)
-        #print("Replace Name:", replace_name_value)
-
-        layout.separator()
-        layout.label(text="Lashes generator")
-
-        row = layout.row()
-        row.prop(scene, "RotateRangeStartX")
-        row.prop(scene, "RotateRangeEndX")
-        row = layout.row()
-        row.prop(scene, "RotateRangeStartY")
-        row.prop(scene, "RotateRangeEndY")
-        row = layout.row()
-        row.prop(scene, "RotateRangeStartZ")
-        row.prop(scene, "RotateRangeEndZ")
-        
-        layout.label(text="Random Scale")
-        row = layout.row()
-        row.prop(scene, "ScaleRangeStart")
-        row.prop(scene, "ScaleEnd")
-        layout.label(text="Random Position Interval")
-        row = layout.row()
-        row.prop(scene, "PosRangeStart")
-        row.prop(scene, "PosRangeEnd")
-        
-        layout.label(text="Rate")
-        row = layout.row()
-        row.prop(scene, "RateRangeGen")
-        layout.label(text="Maximum Frames")
-        row = layout.row()
-        row.prop(scene, "MaximumFrames")
-
-        row = layout.row()
-        row.operator("awt.eyelashesgen", text="Generate eye lashes (BezierCurve and mesh)", icon="SEQ_HISTOGRAM")
-
-        layout.separator()
-        layout.label(text="Dynamic parent")
-        row = layout.row()
-        row.operator("awt.dynamic_parent_create", text="Create", icon="KEY_HLT")
-        row.operator("awt.dynamic_parent_disable", text="Disable", icon="KEY_DEHLT")
-        row = layout.row()
-        row.menu("awt.dynamic_parent_clear_menu", text="Clear")
-
-
         transferweight = scene.Transferweightname
-        layout.separator()
-        layout.label(text="Transfer weight old bones to new bone")
-        row = layout.row()
-        row.prop(transferweight, "KeyOldWeight", text="Old Weight")
-        row = layout.row()
-        row.prop(transferweight, "AddActiveBoneWeight", text="Active Bone")
-        row = layout.row()
-        row.prop(transferweight, "DellOldWeight", text="Delete old weight")
-        row = layout.row()
-        row.operator("awt.transferweightbonestobone", text="Transfer weight", icon="GROUP_BONE")
-        
+
+        try:
+            layout.label(text="Renamer bones", icon='BONE_DATA')
+
+            row = layout.row()
+            row.prop(renamebone, "KeyBone", icon='OUTLINER_OB_FONT')
+            
+            row = layout.row()
+            row.prop(renamebone, "ReplaceNameBone", icon='BOLD')
+
+            row = layout.row()
+            row.operator("awt.renamebones", text="Rename bones", icon="OUTLINER_DATA_GP_LAYER")
+
+            row = layout.row()
+            row.operator("awt.transferlimittoik", text="Transfer limit to IK", icon="POSE_HLT")
+
+            #if context.mode == 'MESH':
+            layout.separator()
+            layout.label(text="Transfer weight old bones to new bone", icon="GROUP_BONE")
+            row = layout.row()
+            row.prop(transferweight, "KeyOldWeight", text="Old Weight", icon="COPYDOWN")
+            row = layout.row()
+            row.prop(transferweight, "AddActiveBoneWeight", text="Active Bone", icon='PASTEDOWN')
+            row = layout.row()
+            row.prop(transferweight, "DellOldWeight", text="Delete old weight")
+            row = layout.row()
+            row.operator("awt.transferweightbonestobone", text="Transfer weight one object", icon="GROUP_BONE")
+            row = layout.row()
+            row.operator("awt.transferweightbonestobonemassrig", text="Transfer weight all objects rig", icon="GROUP_BONE")
+            #row = layout.row()
+            #row.operator("awt.transferweightbonestobonemass", text="Transfer weight all objects", icon="GROUP_BONE")
+
+            layout.separator()
+            layout.label(text="Set Custom Bone Shape", icon='MESH_CUBE')
+
+            # Object picker with eyedropper
+            row = layout.row()
+            row.prop(context.scene, "custom_object_to_bones", text="Shape")
+
+            # Button to apply the custom shape to selected bones
+            row = layout.row()
+            row.operator("awt.set_custom_shape", text="Set to Selected Bones", icon="CON_ARMATURE")
+
+            # DEBUG
+            #key_value = renamescene.Key
+            #replace_name_value = renamescene.ReplaceName
+            #print("Key:", key_value)
+            #print("Replace Name:", replace_name_value)
+
+            layout.separator()
+            layout.label(text="Dynamic parent", icon='OUTLINER_DATA_ARMATURE')
+            row = layout.row()
+            row.operator("awt.dynamic_parent_create", text="Create", icon="KEY_HLT")
+            row.operator("awt.dynamic_parent_disable", text="Disable", icon="KEY_DEHLT")
+            row = layout.row()
+            row.menu("awt.dynamic_parent_clear_menu", text="Clear")
+
+            layout.separator()
+            layout.label(text="Rigs hand Select RigTO, and selecto rig copy", icon='OUTLINER_OB_ARMATURE')
+            row = layout.row()
+            row.operator("awt.copylocationhand", text="Copy def mode", icon="GROUP_BONE")
+            row.operator("awt.copylocationhandarp", text="Copy ARP mode", icon="GROUP_BONE")
+            
+        except:
+            print('AWTool Error panel!') 
+
+class AWUI_Lashesgen_panel(bpy.types.Panel):
+    bl_label = "Lashes generator"
+    bl_idname = "LashesgenPanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        try:
+            layout.label(text="Lashes generator", icon='CURVES')
+
+            row = layout.row()
+            row.prop(scene, "RotateRangeStartX")
+            row.prop(scene, "RotateRangeEndX")
+            row = layout.row()
+            row.prop(scene, "RotateRangeStartY")
+            row.prop(scene, "RotateRangeEndY")
+            row = layout.row()
+            row.prop(scene, "RotateRangeStartZ")
+            row.prop(scene, "RotateRangeEndZ")
+            
+            layout.label(text="Random Scale", icon='SURFACE_NCYLINDER')
+            row = layout.row()
+            row.prop(scene, "ScaleRangeStart")
+            row.prop(scene, "ScaleEnd")
+            layout.label(text="Random Position Interval", icon='FCURVE')
+            row = layout.row()
+            row.prop(scene, "PosRangeStart")
+            row.prop(scene, "PosRangeEnd")
+            
+            layout.label(text="Rate", icon='PREV_KEYFRAME')
+            row = layout.row()
+            row.prop(scene, "RateRangeGen")
+            layout.label(text="Maximum Frames",icon='NEXT_KEYFRAME')
+            row = layout.row()
+            row.prop(scene, "MaximumFrames")
+
+            row = layout.row()
+            row.operator("awt.eyelashesgen", text="Generate eye lashes (BezierCurve and mesh)", icon="SEQ_HISTOGRAM")
+
+        except:
+            print('AWTool Error panel!') 
+
+class AWUI_Optimizationrep_panel(bpy.types.Panel):
+    bl_label = "Optimization and repotology"
+    bl_idname = "OptimizationrepPanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        try:
+            if context.mode == 'EDIT_MESH':
+                layout.label(text="Select and merge", icon='MOD_MULTIRES')
+                row = layout.row()
+                row.operator("awt.selectring_merge", text="Select ring and merge(UV Space need weld)", icon="UV_EDGESEL")
+                #row.operator("awt.selectring_dissolve", text="Select ring and dissolve(Beta)", icon="UV_FACESEL")
+
+        except:
+            print('AWTool Error panel!') 
+
+class AWUI_Optimizationrender_panel(bpy.types.Panel):
+    bl_label = "Optimization render"
+    bl_idname = "OptimizationrenderPanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        try:
+            row = layout.row()
+            row.operator("awt.disable_subdiv_and_multires_on_selected", text="Disable Subdiv and multires", icon="MOD_EXPLODE")
+            row = layout.row()
+            row.operator("awt.triangulate_ngons_on_active", text="Triangulate N-Gons", icon="MOD_TRIANGULATE")
+            row.operator("awt.triangulate_active_mesh", text="Triangulate mesh", icon="MOD_TRIANGULATE")
+
+            row = layout.row()
+            row.prop(bpy.context.scene.render, 'use_simplify', text='Simplify', icon="META_PLANE")
+            row.prop(bpy.context.scene.render, 'simplify_subdivision', text='')
+
+        except:
+            print('AWTool Error panel!') 
+
+class AWUI_Other_panel(bpy.types.Panel):
+    bl_label = "Other tools"
+    bl_idname = "OtherPanel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_parent_id = 'OBJECT_AWT_panel'
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        try:
+            row = layout.row()
+            row.operator("awt.renamemmdtoeng", text="Rename bones/mats MMD JP to English", icon="FONTPREVIEW")
+
+        except:
+            print('AWTool Error panel!') 
 
 classes = (
     AWTools_LowercaseShapeKeys,
+    AWTools_SetAllShapeKeysValuesToZero,
     AWTools_CleanDrivers,
     AWTools_CleanEmptyBlendshapes,
     AWTools_TransferBlendshapes,
@@ -890,7 +1512,26 @@ classes = (
     AWTools_DYNAMIC_PARENT_clear_menu,
     AWTools_Transferweightname,
     AWTools_TransferWeightbonestobone,
+    AWTools_TransferWeightbonestobonemass,
+    AWTools_TransferWeightbonestobonemassrig,
+    AWTools_SetCustomShape,
+    AWTools_CopyLocationHanddef,
+    AWTools_CopyLocationHandarp,
+    AWTools_SelectRingAndMerge,
+    AWTools_SelectRingAndDissolve,
+    AWTools_RenameEngMMD,
+    AWTools_OptimizDisablesubdivandmultires,
+    AWTools_TriangulateNgonsOnActive,
+    AWTools_TriangulateActiveMesh,
     AWTools_ui,
+    AWUI_Statistics_panel,
+    AWUI_Cleaner_panel,
+    AWUI_Shapekeys_panel,
+    AWUI_Bones_panel,
+    AWUI_Lashesgen_panel,
+    AWUI_Optimizationrep_panel,
+    AWUI_Optimizationrender_panel,
+    AWUI_Other_panel,
 )
 
 #register, unregister = bpy.utils.register_classes_factory(classes)
@@ -900,6 +1541,10 @@ def register():
     bpy.types.Scene.Renamer = bpy.props.PointerProperty(type=AWTools_Renamer)
     bpy.types.Scene.Renamerbone = bpy.props.PointerProperty(type=AWTools_Renamerbone)
     bpy.types.Scene.Transferweightname = bpy.props.PointerProperty(type=AWTools_Transferweightname)
+    bpy.types.Scene.custom_object_to_bones = bpy.props.PointerProperty(
+        name="Custom Shape Object",
+        type=bpy.types.Object
+    )
 
 def unregister():
     for cls in classes:
